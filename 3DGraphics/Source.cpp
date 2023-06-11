@@ -22,7 +22,7 @@ float cameraDistance = -5.0f;
 void initializeGLFW(GLFWwindow*& window);
 void initializeOpenGL(GLFWwindow* window);
 void createTexture();
-void setPixelColor(float x, float y, const glm::vec3& color);
+void setPixelColor(int x, int y, const glm::vec3& color);
 void createShaders();
 void createQuad();
 void generateVertices(float* vertices);
@@ -50,11 +50,6 @@ int main() {
 
     // Create Texture
     createTexture();
-
-    // Set some pixel colors
-    setPixelColor(0.5f, 0.5f, glm::vec3(1.0f, 0.0f, 0.0f)); // Center pixel red
-    setPixelColor(0.25f, 0.25f, glm::vec3(0.0f, 1.0f, 0.0f)); // Some green pixel
-    setPixelColor(0.75f, 0.75f, glm::vec3(0.0f, 0.0f, 1.0f)); // Some blue pixel
 
     // Create Shaders
     createShaders();
@@ -101,8 +96,8 @@ void createTexture() {
     glBindTexture(GL_TEXTURE_2D, textureId);
 
     // Set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     // Allocate texture
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, textureWidth, textureHeight, 0, GL_RGB, GL_FLOAT, nullptr);
@@ -114,11 +109,9 @@ void updateTexture() {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void setPixelColor(float x, float y, const glm::vec3& color) {
+void setPixelColor(int x, int y, const glm::vec3& color) {
     // Calculate the pixel index
-    int ix = static_cast<int>(x * textureWidth);
-    int iy = static_cast<int>(y * textureHeight);
-    int index = iy * textureWidth + ix;
+    int index = y * textureWidth + x;
 
     // Set the color of the pixel
     pixels[index] = color;
@@ -477,16 +470,34 @@ void drawCubes(GLFWwindow* window, const float* vertices, const float* colors, s
             glm::vec3 vertex2_2d = glm::vec3(vertex2_4d) / vertex2_4d.w;
 
             // Rasterize the triangle
-            for (int y = 0; y < textureHeight; ++y) {
-                for (int x = 0; x < textureWidth; ++x) {
+            float minX = std::min(vertex0_2d.x, std::min(vertex1_2d.x, vertex2_2d.x));
+            float minY = std::min(vertex0_2d.y, std::min(vertex1_2d.y, vertex2_2d.y));
+            float maxX = std::max(vertex0_2d.x, std::max(vertex1_2d.x, vertex2_2d.x));
+            float maxY = std::max(vertex0_2d.y, std::max(vertex1_2d.y, vertex2_2d.y));
+
+            // Convert to pixel coordinates
+            int start_x = static_cast<int>((minX + 1.0f) * 0.5f * textureWidth - 1);
+            int start_y = static_cast<int>((minY + 1.0f) * 0.5f * textureHeight - 1);
+            int end_x = static_cast<int>((maxX + 1.0f) * 0.5f * textureWidth + 1);
+            int end_y = static_cast<int>((maxY + 1.0f) * 0.5f * textureHeight + 1);
+
+            // Clamp
+            start_x = std::max(0, start_x);
+            start_y = std::max(0, start_y);
+            end_x = std::min(textureWidth, end_x);
+            end_y = std::min(textureHeight, end_y);
+
+            // Only iterate over pixels within the bounding box of the triangle
+            for (int y = start_y; y < end_y; ++y) {
+                for (int x = start_x; x < end_x; ++x) {
                     glm::vec2 pixelPosNDC = glm::vec2(2.0f * x / textureWidth - 1.0f, 2.0f * y / textureHeight - 1.0f);
                     if (pointInTriangle(pixelPosNDC, vertex0_2d, vertex1_2d, vertex2_2d)) {
                         float newDepth = interpolateDepth(pixelPosNDC, vertex0_2d, vertex1_2d, vertex2_2d);
                         float& currentDepth = depthBuffer[y * textureWidth + x];
                         if (newDepth < currentDepth) {
                             // If the new depth is smaller, update the color and depth
-                            glm::vec3 color = (color0 + color1 + color2) / 3.0f;  // Simple color averaging for this example
-                            setPixelColor(x / (float)textureWidth, y / (float)textureHeight, color);
+                            glm::vec3 color = (color0 + color1 + color2) / 3.0f;
+                            setPixelColor(x, y, color);
                             currentDepth = newDepth;
                         }
                     }
@@ -552,10 +563,10 @@ void processInput(GLFWwindow* window, double deltaTime) {
         rotationAngleX -= rotationSpeed * deltaTime;
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraDistance -= 0.5f;
+        cameraDistance -= 0.1f;
 
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraDistance += 0.5f;
+        cameraDistance += 0.1f;
 }
 
 void cleanup() {
