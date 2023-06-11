@@ -8,15 +8,17 @@
 #include "stb_image_write.h"
 #include <vector>
 
+#define TEXTURE_WIDTH 600
+#define TEXTURE_HEIGHT 600
+
 // The texture parameters
 GLuint textureId;
-int textureWidth = 600, textureHeight = 600;
-glm::vec3 pixels[600 * 600];
+glm::vec3 pixels[TEXTURE_WIDTH * TEXTURE_HEIGHT];
 GLuint VAO, VBO, EBO;
 GLuint shaderProgram;
 float rotationAngleX = 0.0f;
 float rotationAngleY = 0.0f;
-float rotationSpeed = 100.0f;
+float rotationSpeed = 150.0f;
 float cameraDistance = -5.0f;
 
 void initializeGLFW(GLFWwindow*& window);
@@ -71,7 +73,7 @@ void initializeGLFW(GLFWwindow*& window) {
         std::cerr << "Failed to initialize GLFW" << std::endl;
         exit(-1);
     }
-    window = glfwCreateWindow(textureWidth, textureHeight, "Cube Demo", NULL, NULL);
+    window = glfwCreateWindow(TEXTURE_WIDTH, TEXTURE_HEIGHT, "Cube Demo", NULL, NULL);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -96,24 +98,23 @@ void createTexture() {
     glBindTexture(GL_TEXTURE_2D, textureId);
 
     // Set texture parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // Allocate texture
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, textureWidth, textureHeight, 0, GL_RGB, GL_FLOAT, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEXTURE_WIDTH, TEXTURE_HEIGHT, 0, GL_RGB, GL_FLOAT, nullptr);
 }
 
 void updateTexture() {
     glBindTexture(GL_TEXTURE_2D, textureId);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, textureWidth, textureHeight, GL_RGB, GL_FLOAT, pixels);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_WIDTH, TEXTURE_HEIGHT, GL_RGB, GL_FLOAT, pixels);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void setPixelColor(int x, int y, const glm::vec3& color) {
     // Calculate the pixel index
-    int index = y * textureWidth + x;
+    int index = y * TEXTURE_WIDTH + x;
 
-    // Set the color of the pixel
     pixels[index] = color;
 }
 
@@ -432,10 +433,10 @@ float interpolateDepth(const glm::vec2& point, const glm::vec3& vertex0, const g
 }
 
 void drawCubes(GLFWwindow* window, const float* vertices, const float* colors, std::vector<float>& depthBuffer) {
-    std::fill_n(pixels, textureWidth * textureHeight, glm::vec3(0.0f));
+    std::fill_n(pixels, TEXTURE_WIDTH * TEXTURE_HEIGHT, glm::vec3(0.0f));
 
     // Calculate aspect ratio
-    float aspectRatio = static_cast<float>(textureWidth) / static_cast<float>(textureHeight);
+    float aspectRatio = static_cast<float>(TEXTURE_WIDTH) / static_cast<float>(TEXTURE_HEIGHT);
     // Calculate projection matrix
     glm::mat4 projection = calculateProjectionMatrix(glm::radians(45.0f), aspectRatio, 0.1f, 100.0f);
     // Calculate the view matrix
@@ -452,7 +453,7 @@ void drawCubes(GLFWwindow* window, const float* vertices, const float* colors, s
         // Render the cube using manual vertex and color data
         for (int j = 0; j < 36; j += 3) {
             // Retrieve the vertex position and color for the current triangle
-            glm::vec3 vertex0(vertices[(j) * 3] , vertices[(j) * 3 + 1], vertices[(j) * 3 + 2]);
+            glm::vec3 vertex0(vertices[(j) * 3], vertices[(j) * 3 + 1], vertices[(j) * 3 + 2]);
             glm::vec3 vertex1(vertices[(j + 1) * 3], vertices[(j + 1) * 3 + 1], vertices[(j + 1) * 3 + 2]);
             glm::vec3 vertex2(vertices[(j + 2) * 3], vertices[(j + 2) * 3 + 1], vertices[(j + 2) * 3 + 2]);
 
@@ -476,24 +477,25 @@ void drawCubes(GLFWwindow* window, const float* vertices, const float* colors, s
             float maxY = std::max(vertex0_2d.y, std::max(vertex1_2d.y, vertex2_2d.y));
 
             // Convert to pixel coordinates
-            int start_x = static_cast<int>((minX + 1.0f) * 0.5f * textureWidth - 1);
-            int start_y = static_cast<int>((minY + 1.0f) * 0.5f * textureHeight - 1);
-            int end_x = static_cast<int>((maxX + 1.0f) * 0.5f * textureWidth + 1);
-            int end_y = static_cast<int>((maxY + 1.0f) * 0.5f * textureHeight + 1);
+            int start_x = static_cast<int>((minX + 1.0f) * 0.5f * TEXTURE_WIDTH - 1);
+            int start_y = static_cast<int>((minY + 1.0f) * 0.5f * TEXTURE_HEIGHT - 1);
+            int end_x = static_cast<int>((maxX + 1.0f) * 0.5f * TEXTURE_WIDTH + 1);
+            int end_y = static_cast<int>((maxY + 1.0f) * 0.5f * TEXTURE_HEIGHT + 1);
 
             // Clamp
             start_x = std::max(0, start_x);
             start_y = std::max(0, start_y);
-            end_x = std::min(textureWidth, end_x);
-            end_y = std::min(textureHeight, end_y);
+            end_x = std::min(TEXTURE_WIDTH, end_x);
+            end_y = std::min(TEXTURE_HEIGHT, end_y);
 
             // Only iterate over pixels within the bounding box of the triangle
+            #pragma omp parallel for collapse(2)
             for (int y = start_y; y < end_y; ++y) {
                 for (int x = start_x; x < end_x; ++x) {
-                    glm::vec2 pixelPosNDC = glm::vec2(2.0f * x / textureWidth - 1.0f, 2.0f * y / textureHeight - 1.0f);
+                    glm::vec2 pixelPosNDC = glm::vec2(2.0f * x / TEXTURE_WIDTH - 1.0f, 2.0f * y / TEXTURE_HEIGHT - 1.0f);
                     if (pointInTriangle(pixelPosNDC, vertex0_2d, vertex1_2d, vertex2_2d)) {
                         float newDepth = interpolateDepth(pixelPosNDC, vertex0_2d, vertex1_2d, vertex2_2d);
-                        float& currentDepth = depthBuffer[y * textureWidth + x];
+                        float& currentDepth = depthBuffer[y * TEXTURE_WIDTH + x];
                         if (newDepth < currentDepth) {
                             // If the new depth is smaller, update the color and depth
                             glm::vec3 color = (color0 + color1 + color2) / 3.0f;
@@ -511,7 +513,7 @@ void drawCubes(GLFWwindow* window, const float* vertices, const float* colors, s
 
 void drawScene(GLFWwindow* window) {
     double lastFrameTime = glfwGetTime();
-    std::vector<float> depthBuffer(textureWidth * textureHeight, std::numeric_limits<float>::infinity());
+    std::vector<float> depthBuffer(TEXTURE_WIDTH * TEXTURE_HEIGHT, std::numeric_limits<float>::infinity());
     float vertices[36 * 3];
     float colors[36 * 3];
     generateVertices(vertices);
@@ -563,10 +565,10 @@ void processInput(GLFWwindow* window, double deltaTime) {
         rotationAngleX -= rotationSpeed * deltaTime;
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraDistance -= 0.1f;
+        cameraDistance -= 0.2f;
 
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraDistance += 0.1f;
+        cameraDistance += 0.2f;
 }
 
 void cleanup() {
